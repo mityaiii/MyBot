@@ -5,9 +5,16 @@ class FormForGroup(StatesGroup):
     name_of_group = State()
     root_id = State()
     password = State()
-    data: dict = {}
 
 
 class LogginGroup(StatesGroup):
     password = State()
-    data: dict = {}
+
+
+class FormForAddSubject(StatesGroup):
+    name_of_subject = State()
+    quantity_of_people = State()
+
+
+class FormForDelSubject(StatesGroup):
+    name_of_subject = State()
