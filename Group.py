@@ -1,10 +1,9 @@
-import Subject
-
-import typing
-
-cur_group = '05'
-
 class Group:
-    url: str = None
-    root: str = None
-    subjects: typing.List[Subject.Subject] = []
+    name: str = None
+    root_id: str = None
+    password: str = None
+
+    def __init__(self, name: str, root_id: str, password: str):
+        self.name = name
+        self.root_id = root_id
+        self.password = password

@@ -1,13 +1,15 @@
+from Config import Config
+
 from aiogram import Bot
-from aiogram import executor
 from aiogram import Dispatcher
 from aiogram.utils.callback_data import CallbackData
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 import configparser
 
 
 class MyBot:
-    token = None
+    __token = None
     bot = None
     dp = None
     cb = CallbackData('post', 'msg_text')
@@ -20,8 +22,6 @@ class MyBot:
         return cls.__instance
 
     def __init__(self):
-        config = configparser.ConfigParser()
-        config.read('secret/config.ini')
-        self.token = config['TELEGRAM']['token']
-        self.bot = Bot(token=self.token)
-        self.dp = Dispatcher(bot=self.bot)
+        self.__token = Config.config['TELEGRAM']['token']
+        self.bot = Bot(token=self.__token)
+        self.dp = Dispatcher(bot=self.bot, storage=MemoryStorage())
