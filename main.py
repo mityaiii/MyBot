@@ -26,11 +26,21 @@ class EnvironmentVariables:
     group: Group.Group = Group.Group()
 
 
+@my_bot.dp.message_handler(state='*', commands=['cancel'])
+async def cancel_handler(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+
+    await state.finish()
+    await message.reply('Cancelled.')
+
+
 @my_bot.dp.callback_query_handler(my_bot.cb.filter())
 async def pressed_button(call: types.CallbackQuery, callback_data: dict) -> None:
     action, msg = callback_data['msg_text'].split('|')
+    info = call.from_user
     if msg in my_database.get_list_of_groups():
-        info = call.from_user
         if action == 'choose':
             await my_bot.bot.send_message(chat_id=info.id, text='Введите пароль группы')
             await LogginGroup.password.set()
@@ -38,12 +48,37 @@ async def pressed_button(call: types.CallbackQuery, callback_data: dict) -> None
         elif action == 'del':
             my_database.del_group(msg)
             await my_bot.bot.send_message(chat_id=info.id, text=f'Вы удалили группу {msg}')
-    if msg in my_database.get_list_of_subjects(my_database.get_user_group(call.from_user.id)):
-        EnvironmentVariables.subject.name = msg
-        EnvironmentVariables.subject.group = my_database.get_user_group(call.from_user.id)
-        my_database.del_subject(EnvironmentVariables.subject)
-        await my_bot.bot.send_message(chat_id=call.from_user.id,
-                                      text=f'Вы удалили предмет {msg}')
+    elif msg in my_database.get_list_of_subjects(my_database.get_user_group(info.id)):
+        name_of_group = my_database.get_user_group(info.id)
+        EnvironmentVariables.subject = my_database.get_subject(name_of_group, msg)
+        if action == 'choose':
+            buttons = additional_functions.form_buttons_with_queue(my_bot, EnvironmentVariables.subject, "enroll")
+            markup = types.InlineKeyboardMarkup(row_width=5)
+            markup.add(*buttons)
+            await my_bot.bot.send_message(chat_id=info.id,
+                                          text=f'Очередь на предмет {EnvironmentVariables.subject.name}',
+                                          reply_markup=markup)
+        elif action == 'del':
+            my_database.del_subject(name_of_group, EnvironmentVariables.subject)
+            await my_bot.bot.send_message(chat_id=info.id, text=f'Вы удалили предмет {msg}')
+    elif msg.isdigit():
+        pass
+
+
+@my_bot.dp.message_handler(Text(equals='Помощь'))
+async def print_help(message: types.Message):
+    pass
+
+
+@my_bot.dp.message_handler(Text(equals='Выбрать предмет'))
+async def choose_subject(message: types.Message):
+    buttons = additional_functions.form_buttons_with_subjects(my_bot, my_database,
+                                                              my_database.get_user_group(message.from_user.id),
+                                                              "choose")
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(*buttons)
+    await my_bot.bot.send_message(message.from_user.id, text='Выберите предмет, на который вы хотели бы записаться',
+                                  reply_markup=markup)
 
 
 @my_bot.dp.message_handler(commands=['start'])
@@ -60,7 +95,11 @@ async def process_name(message: types.Message, state: FSMContext):
     password = my_database.db.groups.find_one({"_id": EnvironmentVariables.user.group})["password"]
     if message.text == password:
         my_database.add_user(EnvironmentVariables.user)
-        await message.reply(text="Поздравляю! Вы ввели правильный пароль")
+        button_subject = types.KeyboardButton(text='Выбрать предмет')
+        button_help = types.KeyboardButton(text='Помощь')
+        markup = types.ReplyKeyboardMarkup()
+        markup.add(button_help, button_subject)
+        await message.reply(text="Поздравляю! Вы ввели правильный пароль", reply_markup=markup)
         if message.from_user.id == my_id:
             await set_commands_in_menu(additional_functions.set_main_commands())
         elif message.from_user.id == my_database.db.groups.find_one({"root_id": EnvironmentVariables.user.group}):
@@ -73,7 +112,7 @@ async def process_name(message: types.Message, state: FSMContext):
 
 
 @my_bot.dp.message_handler(state=FormForGroup.name_of_group)
-async def process_name(message: types.Message, state: FSMContext):
+async def process_name(message: types.Message):
     if not my_database.is_exist_collection(message.text):
         EnvironmentVariables.user = User.User.name
         EnvironmentVariables.group.name = message.text
@@ -85,7 +124,7 @@ async def process_name(message: types.Message, state: FSMContext):
 
 
 @my_bot.dp.message_handler(state=FormForGroup.root_id)
-async def process_name(message: types.Message, state: FSMContext):
+async def process_name(message: types.Message):
     EnvironmentVariables.group.root_id = int(message.text)
     await FormForGroup.next()
     await message.reply(
@@ -120,7 +159,6 @@ async def del_group_with_command(message: types.Message) -> None:
 @my_bot.dp.message_handler(state=FormForAddSubject.name_of_subject)
 async def process_name(message: types.Message, state: FSMContext):
     comm = await state.get_data()
-    print(state.get_data())
     if comm.get("comm") == "add":
         EnvironmentVariables.subject.name = message.text
         await FormForAddSubject.next()
@@ -129,9 +167,9 @@ async def process_name(message: types.Message, state: FSMContext):
 
 @my_bot.dp.message_handler(state=FormForAddSubject.quantity_of_people)
 async def process_name(message: types.Message, state: FSMContext):
-    EnvironmentVariables.subject.quantity_of_person = int(message.text)
+    EnvironmentVariables.subject.people = int(message.text)
     await message.reply(text=f"Вы добавили предмет {EnvironmentVariables.subject.name}"
-                             f" с количеством учистников: {EnvironmentVariables.subject.quantity_of_person}")
+                             f" с количеством участников: {EnvironmentVariables.subject.people}")
     my_database.add_subject(EnvironmentVariables.subject)
     await state.finish()
 
@@ -148,21 +186,11 @@ async def add_subject_with_command(message: types.Message, state: FSMContext) ->
 @my_bot.dp.message_handler(commands=['del_subject'])
 async def del_subject_with_command(message: types.Message) -> None:
     buttons = additional_functions.form_buttons_with_subjects(my_bot, my_database, my_database.get_user_group(
-        message.from_user.id), "")
+        message.from_user.id), "del")
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(*buttons)
     await my_bot.bot.send_message(chat_id=message.from_user.id,
                                   text="Укажите название предмета, который вы хотите удалить", reply_markup=markup)
-
-
-@my_bot.dp.message_handler(state='*', commands=['cancel'])
-async def cancel_handler(message: types.Message, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state is None:
-        return
-
-    await state.finish()
-    await message.reply('Cancelled.')
 
 
 async def set_commands_in_menu(my_commands):

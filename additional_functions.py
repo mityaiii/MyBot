@@ -4,6 +4,7 @@ from aiogram import types
 import Group
 import MyBot
 import MyDataBase
+import Subject
 
 
 def get_text_without_command(message: str) -> str:
@@ -16,15 +17,24 @@ def get_many_arg_from_command(message: str) -> list:
 
 def form_buttons_with_groups(my_bot: MyBot, my_database: MyDataBase, action: str) -> typing.List[
     types.InlineKeyboardButton]:
-    buttons = [types.InlineKeyboardButton(text=group, callback_data=my_bot.cb.new(msg_text=action + '|' + group)) for
+    buttons = [types.InlineKeyboardButton(text=group, callback_data=my_bot.cb.new(msg_text=f'{action}|{group}')) for
                group in my_database.get_list_of_groups()]
     return buttons
 
 
 def form_buttons_with_subjects(my_bot: MyBot.MyBot, my_database: MyDataBase.MyDataBase, group: str,
                                action: str) -> typing.List[types.InlineKeyboardButton]:
-    buttons = [types.InlineKeyboardButton(text=subject, callback_data=my_bot.cb.new(msg_text=action + '|' + subject))
+    buttons = [types.InlineKeyboardButton(text=subject, callback_data=my_bot.cb.new(msg_text=f'{action}|{subject}'))
                for subject in my_database.get_list_of_subjects(group)]
+    return buttons
+
+
+def form_buttons_with_queue(my_bot: MyBot.MyBot, subject: Subject.Subject, action: str) -> typing.List[
+    types.InlineKeyboardButton]:
+    buttons: typing.List[types.InlineKeyboardButton] = []
+    for i in range(subject.people):
+        buttons.append(types.InlineKeyboardButton(text=f'{i + 1}✅',
+                                                  callback_data=my_bot.cb.new(msg_text=f'{action}|{i + 1}')))
     return buttons
 
 

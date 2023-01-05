@@ -30,7 +30,7 @@ class MyDataBase:
     def is_exist_collection(self, name_of_collection) -> bool:
         return name_of_collection in [group["name"] for group in self.db.list_collections()]
 
-    def get_list_of_subjects(self, group: str) -> list:
+    def get_list_of_subjects(self, group: str) -> typing.List[str]:
         return [subject["_id"] for subject in self.db[group].find({})]
 
     def get_list_of_groups(self) -> typing.List[str]:
@@ -41,6 +41,14 @@ class MyDataBase:
 
     def get_user_group(self, tg_id: int) -> str:
         return self.db.users.find_one({"_id": tg_id})["group"]
+
+    def get_subject(self, group: str, name_of_subject: str) -> Subject.Subject:
+        subject_from_db = self.db[group].find_one({"_id": f"{name_of_subject}"})
+        subject = Subject.Subject()
+        subject.name = subject_from_db["_id"]
+        subject.people = subject_from_db["people"]
+        subject.cur_queue = subject_from_db["cur_queue"]
+        return subject
 
     def add_user(self, user: User.User) -> bool:
         self.coll = self.db.users
@@ -56,7 +64,7 @@ class MyDataBase:
         self.coll = self.db[subject.group]
         if self.is_exist_value("_id", subject.name):
             self.coll.insert_one(
-                {"_id": subject.name, "people": subject.quantity_of_person, "cur_queue": subject.cur_queue})
+                {"_id": subject.name, "people": subject.people, "cur_queue": subject.cur_queue})
             return True
         return False
 
@@ -68,14 +76,13 @@ class MyDataBase:
             return True
         return False
 
-    def del_group(self, group: str):
+    def del_group(self, group: str) -> None:
         self.coll = self.db[group]
         self.coll.drop()
         self.db.groups.delete_one({"_id": group})
 
-    def del_subject(self, subject: Subject.Subject):
-        print(subject.group)
-        self.db[subject.group].delete_one({"_id": subject.name})
+    def del_subject(self, group:str, subject: Subject.Subject) -> None:
+        self.db[group].delete_one({"_id": subject.name})
 
     def find_group(self, root_id) -> str:
         return self.db.groups.find_one({"root_id": root_id})["_id"]
