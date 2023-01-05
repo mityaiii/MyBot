@@ -5,8 +5,6 @@ from aiogram import Dispatcher
 from aiogram.utils.callback_data import CallbackData
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
-import configparser
-
 
 class MyBot:
     __token = None

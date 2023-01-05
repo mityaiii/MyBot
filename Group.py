@@ -1,4 +1,4 @@
 class Group:
     name: str = None
-    root_id: str = None
+    root_id: int = None
     password: str = None

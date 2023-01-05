@@ -28,18 +28,29 @@ class EnvironmentVariables:
 
 @my_bot.dp.callback_query_handler(my_bot.cb.filter())
 async def pressed_button(call: types.CallbackQuery, callback_data: dict) -> None:
-    if callback_data['msg_text'] in [group["name"] for group in my_database.db.list_collections()]:
+    action, msg = callback_data['msg_text'].split('|')
+    if msg in my_database.get_list_of_groups():
         info = call.from_user
-        await my_bot.bot.send_message(chat_id=info.id, text='Введите пароль группы')
-        await LogginGroup.password.set()
-        EnvironmentVariables.user = User.User(tg_id=info.id, name=info.first_name, group=callback_data['msg_text'])
+        if action == 'choose':
+            await my_bot.bot.send_message(chat_id=info.id, text='Введите пароль группы')
+            await LogginGroup.password.set()
+            EnvironmentVariables.user = User.User(tg_id=info.id, name=info.first_name, group=msg)
+        elif action == 'del':
+            my_database.del_group(msg)
+            await my_bot.bot.send_message(chat_id=info.id, text=f'Вы удалили группу {msg}')
+    if msg in my_database.get_list_of_subjects(my_database.get_user_group(call.from_user.id)):
+        EnvironmentVariables.subject.name = msg
+        EnvironmentVariables.subject.group = my_database.get_user_group(call.from_user.id)
+        my_database.del_subject(EnvironmentVariables.subject)
+        await my_bot.bot.send_message(chat_id=call.from_user.id,
+                                      text=f'Вы удалили предмет {msg}')
 
 
 @my_bot.dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message) -> None:
     text = f'Привет, {message.from_user.first_name}, выбери свою группу'
     markup = types.InlineKeyboardMarkup(row_width=1)
-    buttons = additional_functions.form_buttons_with_groups(my_bot, my_database)
+    buttons = additional_functions.form_buttons_with_groups(my_bot, my_database, 'choose')
     markup.add(*buttons)
     await my_bot.bot.send_message(chat_id=message.from_user.id, text=text, reply_markup=markup)
 
@@ -49,7 +60,7 @@ async def process_name(message: types.Message, state: FSMContext):
     password = my_database.db.groups.find_one({"_id": EnvironmentVariables.user.group})["password"]
     if message.text == password:
         my_database.add_user(EnvironmentVariables.user)
-        await message.reply(text="Все прошло успешно!")
+        await message.reply(text="Поздравляю! Вы ввели правильный пароль")
         if message.from_user.id == my_id:
             await set_commands_in_menu(additional_functions.set_main_commands())
         elif message.from_user.id == my_database.db.groups.find_one({"root_id": EnvironmentVariables.user.group}):
@@ -75,7 +86,7 @@ async def process_name(message: types.Message, state: FSMContext):
 
 @my_bot.dp.message_handler(state=FormForGroup.root_id)
 async def process_name(message: types.Message, state: FSMContext):
-    EnvironmentVariables.group.root_id = message.text
+    EnvironmentVariables.group.root_id = int(message.text)
     await FormForGroup.next()
     await message.reply(
         f"Вы создали группу {EnvironmentVariables.group.name} и назначили старостой {EnvironmentVariables.group.root_id}."
@@ -99,21 +110,21 @@ async def add_group_with_command(message: types.Message) -> None:
 
 @my_bot.dp.message_handler(commands=['del_group'])
 async def del_group_with_command(message: types.Message) -> None:
-    buttons = additional_functions.form_buttons_with_groups(my_bot, my_database)
+    buttons = additional_functions.form_buttons_with_groups(my_bot, my_database, 'del')
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(*buttons)
     await my_bot.bot.send_message(chat_id=message.from_user.id, text='Выберите группу, которую вы хотите удалить',
                                   reply_markup=markup)
 
 
-@my_bot.dp.message_handler(state=[FormForAddSubject.name_of_subject, FormForDelSubject.name_of_subject])
+@my_bot.dp.message_handler(state=FormForAddSubject.name_of_subject)
 async def process_name(message: types.Message, state: FSMContext):
-    if state == FormForAddSubject.name_of_subject:
+    comm = await state.get_data()
+    print(state.get_data())
+    if comm.get("comm") == "add":
         EnvironmentVariables.subject.name = message.text
         await FormForAddSubject.next()
-        await message.reply(text="Укажите число людей в группе")
-    else:
-        my_database.del_subject(EnvironmentVariables.subject)
+        await message.reply(text='Укажите число людей в группе')
 
 
 @my_bot.dp.message_handler(state=FormForAddSubject.quantity_of_people)
@@ -126,16 +137,22 @@ async def process_name(message: types.Message, state: FSMContext):
 
 
 @my_bot.dp.message_handler(commands=['add_subject'])
-async def add_subject_with_command(message: types.Message) -> None:
+async def add_subject_with_command(message: types.Message, state: FSMContext) -> None:
     EnvironmentVariables.subject.group = my_database.find_group(message.from_user.id)
-    my_bot.bot.send_message(chat_id=message.from_user.id, text="Укажите название предмета, который вы хотите добавить")
-    await FormForAddSubject.name_of_subject.state.set()
+    await my_bot.bot.send_message(chat_id=message.from_user.id,
+                                  text="Укажите название предмета, который вы хотите добавить")
+    await state.set_data({"comm": "add"})
+    await FormForAddSubject.name_of_subject.set()
 
 
 @my_bot.dp.message_handler(commands=['del_subject'])
 async def del_subject_with_command(message: types.Message) -> None:
-    my_bot.bot.send_message(chat_id=message.from_user.id, text="Укажите название предмета, который вы хотите удалить")
-    await FormForDelSubject.name_of_subject.state.set()
+    buttons = additional_functions.form_buttons_with_subjects(my_bot, my_database, my_database.get_user_group(
+        message.from_user.id), "")
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(*buttons)
+    await my_bot.bot.send_message(chat_id=message.from_user.id,
+                                  text="Укажите название предмета, который вы хотите удалить", reply_markup=markup)
 
 
 @my_bot.dp.message_handler(state='*', commands=['cancel'])
