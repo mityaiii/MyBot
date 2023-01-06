@@ -83,21 +83,15 @@ async def enroll(my_bot: MyBot.MyBot, my_database: MyDataBase.MyDataBase, user: 
     if user.tg_id in subject.cur_queue:
         await my_bot.bot.send_message(chat_id=user.tg_id, text='Нельзя записаться дважды(')
     elif subject.cur_queue[number] is None:
-        _text, buttons = form_buttons_with_queue(my_bot, subject, user)
+        subject.cur_queue[number] = user.tg_id
+        text, buttons = form_buttons_with_queue(my_bot, subject, user)
         new_markup = types.InlineKeyboardMarkup(row_width=5)
         new_markup.add(*buttons)
-        new_markup.inline_keyboard[number // ROW_SIZE][number % ROW_SIZE]["text"] = f"{number + 1}❌"
-        new_markup.inline_keyboard[number // ROW_SIZE][number % ROW_SIZE][
-            "callback_data"] = f"check_out|{subject.name}|{number + 1}"
-
-        text = msg.text
         digits = get_digits_of_number(number)
 
         text = text[:text.find(f'{number + 1})') + digits] + f' {user.name}' + '\n' + text[text.find(
             f'{number + 2}'):]
-        await my_bot.bot.edit_message_reply_markup(chat_id=user.tg_id,
-                                                   message_id=msg.message_id,
-                                                   reply_markup=new_markup)
+        await msg.edit_text(text=text, reply_markup=new_markup)
         my_database.enroll(user, subject, number)
     else:
         await my_bot.bot.send_message(chat_id=user.tg_id, text='Извините, место занято')
@@ -106,25 +100,18 @@ async def enroll(my_bot: MyBot.MyBot, my_database: MyDataBase.MyDataBase, user: 
 async def check_out(my_bot: MyBot.MyBot, my_database: MyDataBase.MyDataBase, user: User.User, subject: Subject.Subject,
                     msg: types.Message, number: int) -> None:
     number -= 1
+    subject.cur_queue[number] = None
     new_markup = types.InlineKeyboardMarkup(row_width=5)
-    _text, buttons = form_buttons_with_queue(my_bot, subject, user)
+    text, buttons = form_buttons_with_queue(my_bot, subject, user)
     new_markup.add(*buttons)
-    print([i for i in new_markup.inline_keyboard][0])
-    new_markup.inline_keyboard[number // ROW_SIZE][number % ROW_SIZE]["text"] = f"{number + 1}✅"
-    new_markup.inline_keyboard[number // ROW_SIZE][number % ROW_SIZE][
-        "callback_data"] = f"enroll|{subject.name}|{number + 1}"
-
-    text = msg.text
     digits = get_digits_of_number(number)
     if number + 1 == subject.people:
-        text = text[:text.find(f'{number + 1})') + digits]
+        text = text[:text.find(f'{number + 1}') + digits]
     else:
-        text = text[:text.find(f'{number + 1})') + digits] + '\n' + text[text.find(f'{number + 2})'):]
-    await my_bot.bot.edit_message_reply_markup(chat_id=user.tg_id,
-                                               message_id=msg.message_id,
-                                               reply_markup=new_markup)
+        text = text[:text.find(f'{number + 1})') + digits] + '\n' + text[text.find(f'{number + 2}'):]
+    await msg.edit_text(text=text, reply_markup=new_markup)
     my_database.check_out(user, subject, number)
 
 
-def find_root():
+def change_for_all_members():
     pass

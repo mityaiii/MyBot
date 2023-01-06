@@ -5,12 +5,11 @@ import User
 import MyDataBase
 import AdditionalFunctions
 
-import types
 import typing
 
 from Config import Config
 
-from aiogram import types, executor
+from aiogram import types
 from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher import FSMContext
 from Forms import *
@@ -36,7 +35,7 @@ async def cancel_handler(message: types.Message, state: FSMContext):
     await message.reply('Cancelled.')
 
 
-@my_bot.dp.callback_query_handler(my_bot.cb.filter(), state='*')
+@my_bot.dp.callback_query_handler(my_bot.cb.filter())
 async def pressed_button(call: types.CallbackQuery, callback_data: dict) -> None:
     action, name_of_subject, msg = callback_data["msg_text"].split("|")
     info = call.from_user
@@ -67,14 +66,13 @@ async def pressed_button(call: types.CallbackQuery, callback_data: dict) -> None
         name_of_group = my_database.get_user_group(info.id)
         EnvironmentVariables.subject = my_database.get_subject(name_of_group, name_of_subject)
         EnvironmentVariables.user = my_database.get_user(info.id)
-        print(action)
         if action == "enroll":
             await AdditionalFunctions.enroll(my_bot, my_database, EnvironmentVariables.user,
                                              EnvironmentVariables.subject, call.message, int(msg))
         elif action == "check_out":
-            print(1)
             await AdditionalFunctions.check_out(my_bot, my_database, EnvironmentVariables.user,
-                                             EnvironmentVariables.subject, call.message, int(msg))
+                                                EnvironmentVariables.subject, call.message, int(msg))
+    await my_bot.bot.answer_callback_query(call.id)
 
 
 @my_bot.dp.message_handler(Text(equals='Помощь'))
@@ -212,7 +210,8 @@ async def set_commands_in_menu(my_commands):
 
 
 def main():
-    executor.start_polling(my_bot.dp)
+    # executor.start_polling(my_bot.dp)
+    pass
 
 
 if __name__ == '__main__':
