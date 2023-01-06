@@ -3,7 +3,7 @@ import Group
 import Subject
 import User
 import MyDataBase
-import additional_functions
+import AdditionalFunctions
 
 import types
 import typing
@@ -21,7 +21,7 @@ my_id = int(Config.config["ID"]["my_id"])
 
 
 class EnvironmentVariables:
-    user: User.User
+    user: User.User = User.User()
     subject: Subject.Subject = Subject.Subject()
     group: Group.Group = Group.Group()
 
@@ -36,33 +36,45 @@ async def cancel_handler(message: types.Message, state: FSMContext):
     await message.reply('Cancelled.')
 
 
-@my_bot.dp.callback_query_handler(my_bot.cb.filter())
+@my_bot.dp.callback_query_handler(my_bot.cb.filter(), state='*')
 async def pressed_button(call: types.CallbackQuery, callback_data: dict) -> None:
-    action, msg = callback_data['msg_text'].split('|')
+    action, name_of_subject, msg = callback_data["msg_text"].split("|")
     info = call.from_user
     if msg in my_database.get_list_of_groups():
-        if action == 'choose':
+        if action == "choose":
             await my_bot.bot.send_message(chat_id=info.id, text='Введите пароль группы')
-            await LogginGroup.password.set()
+            await LoginGroup.password.set()
             EnvironmentVariables.user = User.User(tg_id=info.id, name=info.first_name, group=msg)
-        elif action == 'del':
+        elif action == "del":
             my_database.del_group(msg)
             await my_bot.bot.send_message(chat_id=info.id, text=f'Вы удалили группу {msg}')
     elif msg in my_database.get_list_of_subjects(my_database.get_user_group(info.id)):
         name_of_group = my_database.get_user_group(info.id)
         EnvironmentVariables.subject = my_database.get_subject(name_of_group, msg)
-        if action == 'choose':
-            buttons = additional_functions.form_buttons_with_queue(my_bot, EnvironmentVariables.subject, "enroll")
+        EnvironmentVariables.user = my_database.get_user(info.id)
+        if action == "choose":
+            text, buttons = AdditionalFunctions.form_buttons_with_queue(my_bot, EnvironmentVariables.subject,
+                                                                        EnvironmentVariables.user)
             markup = types.InlineKeyboardMarkup(row_width=5)
             markup.add(*buttons)
             await my_bot.bot.send_message(chat_id=info.id,
-                                          text=f'Очередь на предмет {EnvironmentVariables.subject.name}',
+                                          text=text,
                                           reply_markup=markup)
-        elif action == 'del':
+        elif action == "del":
             my_database.del_subject(name_of_group, EnvironmentVariables.subject)
             await my_bot.bot.send_message(chat_id=info.id, text=f'Вы удалили предмет {msg}')
     elif msg.isdigit():
-        pass
+        name_of_group = my_database.get_user_group(info.id)
+        EnvironmentVariables.subject = my_database.get_subject(name_of_group, name_of_subject)
+        EnvironmentVariables.user = my_database.get_user(info.id)
+        print(action)
+        if action == "enroll":
+            await AdditionalFunctions.enroll(my_bot, my_database, EnvironmentVariables.user,
+                                             EnvironmentVariables.subject, call.message, int(msg))
+        elif action == "check_out":
+            print(1)
+            await AdditionalFunctions.check_out(my_bot, my_database, EnvironmentVariables.user,
+                                             EnvironmentVariables.subject, call.message, int(msg))
 
 
 @my_bot.dp.message_handler(Text(equals='Помощь'))
@@ -72,9 +84,9 @@ async def print_help(message: types.Message):
 
 @my_bot.dp.message_handler(Text(equals='Выбрать предмет'))
 async def choose_subject(message: types.Message):
-    buttons = additional_functions.form_buttons_with_subjects(my_bot, my_database,
-                                                              my_database.get_user_group(message.from_user.id),
-                                                              "choose")
+    buttons = AdditionalFunctions.form_buttons_with_subjects(my_bot, my_database,
+                                                             my_database.get_user_group(message.from_user.id),
+                                                             "choose")
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(*buttons)
     await my_bot.bot.send_message(message.from_user.id, text='Выберите предмет, на который вы хотели бы записаться',
@@ -85,12 +97,12 @@ async def choose_subject(message: types.Message):
 async def start_handler(message: types.Message) -> None:
     text = f'Привет, {message.from_user.first_name}, выбери свою группу'
     markup = types.InlineKeyboardMarkup(row_width=1)
-    buttons = additional_functions.form_buttons_with_groups(my_bot, my_database, 'choose')
+    buttons = AdditionalFunctions.form_buttons_with_groups(my_bot, my_database, 'choose')
     markup.add(*buttons)
     await my_bot.bot.send_message(chat_id=message.from_user.id, text=text, reply_markup=markup)
 
 
-@my_bot.dp.message_handler(state=LogginGroup.password)
+@my_bot.dp.message_handler(state=LoginGroup.password)
 async def process_name(message: types.Message, state: FSMContext):
     password = my_database.db.groups.find_one({"_id": EnvironmentVariables.user.group})["password"]
     if message.text == password:
@@ -101,9 +113,9 @@ async def process_name(message: types.Message, state: FSMContext):
         markup.add(button_help, button_subject)
         await message.reply(text="Поздравляю! Вы ввели правильный пароль", reply_markup=markup)
         if message.from_user.id == my_id:
-            await set_commands_in_menu(additional_functions.set_main_commands())
+            await set_commands_in_menu(AdditionalFunctions.set_main_commands())
         elif message.from_user.id == my_database.db.groups.find_one({"root_id": EnvironmentVariables.user.group}):
-            await set_commands_in_menu(additional_functions.set_commands_for_root())
+            await set_commands_in_menu(AdditionalFunctions.set_commands_for_root())
         else:
             await set_commands_in_menu(None)
         await state.finish()
@@ -149,7 +161,7 @@ async def add_group_with_command(message: types.Message) -> None:
 
 @my_bot.dp.message_handler(commands=['del_group'])
 async def del_group_with_command(message: types.Message) -> None:
-    buttons = additional_functions.form_buttons_with_groups(my_bot, my_database, 'del')
+    buttons = AdditionalFunctions.form_buttons_with_groups(my_bot, my_database, 'del')
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(*buttons)
     await my_bot.bot.send_message(chat_id=message.from_user.id, text='Выберите группу, которую вы хотите удалить',
@@ -185,7 +197,7 @@ async def add_subject_with_command(message: types.Message, state: FSMContext) ->
 
 @my_bot.dp.message_handler(commands=['del_subject'])
 async def del_subject_with_command(message: types.Message) -> None:
-    buttons = additional_functions.form_buttons_with_subjects(my_bot, my_database, my_database.get_user_group(
+    buttons = AdditionalFunctions.form_buttons_with_subjects(my_bot, my_database, my_database.get_user_group(
         message.from_user.id), "del")
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(*buttons)

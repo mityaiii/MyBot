@@ -50,10 +50,14 @@ class MyDataBase:
         subject.cur_queue = subject_from_db["cur_queue"]
         return subject
 
+    def get_user(self, tg_id) -> User.User:
+        user_from_db = self.db.users.find_one({"_id": tg_id})
+        user = User.User(user_from_db["_id"], user_from_db["name"], user_from_db["group"])
+        return user
+
     def add_user(self, user: User.User) -> bool:
         self.coll = self.db.users
         if self.is_exist_value("_id", user.tg_id):
-            print(self.db.groups.find_one({"_id": user.group})["root_id"])
             if self.db.groups.find_one({"_id": user.group})["root_id"] == user.tg_id:
                 user.root = True
             self.coll.insert_one({"_id": user.tg_id, "name": user.name, "group": user.group, "root": user.root})
@@ -63,6 +67,7 @@ class MyDataBase:
     def add_subject(self, subject) -> bool:
         self.coll = self.db[subject.group]
         if self.is_exist_value("_id", subject.name):
+            subject.cur_queue = [None] * subject.people
             self.coll.insert_one(
                 {"_id": subject.name, "people": subject.people, "cur_queue": subject.cur_queue})
             return True
@@ -81,8 +86,23 @@ class MyDataBase:
         self.coll.drop()
         self.db.groups.delete_one({"_id": group})
 
-    def del_subject(self, group:str, subject: Subject.Subject) -> None:
+    def del_subject(self, group: str, subject: Subject.Subject) -> None:
         self.db[group].delete_one({"_id": subject.name})
 
     def find_group(self, root_id) -> str:
         return self.db.groups.find_one({"root_id": root_id})["_id"]
+
+    def get_queue(self, user: User.User, subject: Subject.Subject) -> typing.List[int]:
+        return self.db[user.group].find_one({"_id": subject.name})["cur_queue"]
+
+    def enroll(self, user: User.User, subject: Subject.Subject, number: int) -> None:
+        cur_queue = self.get_queue(user, subject)
+        if cur_queue[number] is None:
+            cur_queue[number] = user.tg_id
+            self.db[user.group].update_one({"_id": subject.name}, {"$set": {"cur_queue": cur_queue}})
+
+    def check_out(self, user: User.User, subject: Subject.Subject, number: int) -> None:
+        cur_queue = self.get_queue(user, subject)
+        if cur_queue[number] is not None:
+            cur_queue[number] = None
+            self.db[user.group].update_one({"_id": subject.name}, {"$set": {"cur_queue": cur_queue}})

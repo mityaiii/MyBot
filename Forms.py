@@ -7,7 +7,7 @@ class FormForGroup(StatesGroup):
     password = State()
 
 
-class LogginGroup(StatesGroup):
+class LoginGroup(StatesGroup):
     password = State()
 
 
