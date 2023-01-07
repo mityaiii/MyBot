@@ -9,7 +9,7 @@ import typing
 
 from Config import Config
 
-from aiogram import types
+from aiogram import types, executor
 from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher import FSMContext
 from Forms import *
@@ -56,12 +56,16 @@ async def pressed_button(call: types.CallbackQuery, callback_data: dict) -> None
                                                                         EnvironmentVariables.user)
             markup = types.InlineKeyboardMarkup(row_width=5)
             markup.add(*buttons)
-            await my_bot.bot.send_message(chat_id=info.id,
-                                          text=text,
-                                          reply_markup=markup)
+            await my_bot.bot.send_message(chat_id=info.id, text=text, reply_markup=markup)
         elif action == "del":
             my_database.del_subject(name_of_group, EnvironmentVariables.subject)
             await my_bot.bot.send_message(chat_id=info.id, text=f'Вы удалили предмет {msg}')
+        elif action == "del_person":
+            text, buttons = AdditionalFunctions.form_buttons_with_queue(my_bot, EnvironmentVariables.subject,
+                                                                        EnvironmentVariables.user)
+            markup = types.InlineKeyboardMarkup(row_width=5)
+            markup.add(*buttons)
+            await my_bot.bot.send_message(chat_id=info.id, text=text, reply_markup=markup)
     elif msg.isdigit():
         name_of_group = my_database.get_user_group(info.id)
         EnvironmentVariables.subject = my_database.get_subject(name_of_group, name_of_subject)
@@ -71,7 +75,7 @@ async def pressed_button(call: types.CallbackQuery, callback_data: dict) -> None
                                              EnvironmentVariables.subject, call.message, int(msg))
         elif action == "check_out":
             await AdditionalFunctions.check_out(my_bot, my_database, EnvironmentVariables.user,
-                                                EnvironmentVariables.subject, call.message, int(msg))
+                                                EnvironmentVariables.subject, int(msg))
     await my_bot.bot.answer_callback_query(call.id)
 
 
@@ -203,15 +207,20 @@ async def del_subject_with_command(message: types.Message) -> None:
                                   text="Укажите название предмета, который вы хотите удалить", reply_markup=markup)
 
 
-async def set_commands_in_menu(my_commands):
+@my_bot.dp.message_handler(commands=['del_person'])
+async def del_person_with_command(message: types.Message) -> None:
+    await my_bot.bot.send_message(chat_id=message.from_user.id,
+                                  text="Вы можете отписать одного человека, нажав ❌ в том, где он записан")
+
+
+async def set_commands_in_menu(my_commands) -> None:
     if my_commands is not None:
         list_of_commands = [types.BotCommand(command[0], command[1]) for command in my_commands.items()]
         await my_bot.dp.bot.set_my_commands(list_of_commands)
 
 
 def main():
-    # executor.start_polling(my_bot.dp)
-    pass
+    executor.start_polling(my_bot.dp)
 
 
 if __name__ == '__main__':

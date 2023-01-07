@@ -54,8 +54,8 @@ def form_buttons_with_queue(my_bot: MyBot.MyBot, subject: Subject.Subject, user:
 def set_commands_for_root() -> typing.Dict[str, str]:
     my_commands = {
         "add_subject": "Добавить предмет в свою группу",
-        "del_subject": "Удалить предмет"
-
+        "del_subject": "Удалить предмет",
+        "del_person": "Удалить человека из очереди"
     }
     return my_commands
 
@@ -75,15 +75,25 @@ def get_digits_of_number(number: int) -> int:
     return i
 
 
+async def update_msgs(my_bot: MyBot.MyBot, user: User.User, msg_ids: typing.List[int], text: str,
+                      markup: types.InlineKeyboardMarkup) -> None:
+    for recipient in msg_ids:
+        if recipient is not None:
+            await my_bot.bot.edit_message_text(chat_id=user.tg_id, message_id=recipient, text=text, reply_markup=markup)
+
+
 async def enroll(my_bot: MyBot.MyBot, my_database: MyDataBase.MyDataBase, user: User.User, subject: Subject.Subject,
                  msg: types.Message, number: int) -> None:
     number -= 1
-    subject.cur_queue = my_database.get_queue(user, subject)
-
     if user.tg_id in subject.cur_queue:
         await my_bot.bot.send_message(chat_id=user.tg_id, text='Нельзя записаться дважды(')
     elif subject.cur_queue[number] is None:
+        my_database.enroll(user, subject, msg.message_id, number)
+
+        subject.cur_queue = my_database.get_queue(user, subject)
+        subject.msg_ids = my_database.get_msg_history(user, subject)
         subject.cur_queue[number] = user.tg_id
+        subject.msg_ids[number] = msg.message_id
         text, buttons = form_buttons_with_queue(my_bot, subject, user)
         new_markup = types.InlineKeyboardMarkup(row_width=5)
         new_markup.add(*buttons)
@@ -91,27 +101,29 @@ async def enroll(my_bot: MyBot.MyBot, my_database: MyDataBase.MyDataBase, user: 
 
         text = text[:text.find(f'{number + 1})') + digits] + f' {user.name}' + '\n' + text[text.find(
             f'{number + 2}'):]
-        await msg.edit_text(text=text, reply_markup=new_markup)
-        my_database.enroll(user, subject, number)
+        await update_msgs(my_bot, user, subject.msg_ids, text, new_markup)
     else:
         await my_bot.bot.send_message(chat_id=user.tg_id, text='Извините, место занято')
 
 
 async def check_out(my_bot: MyBot.MyBot, my_database: MyDataBase.MyDataBase, user: User.User, subject: Subject.Subject,
-                    msg: types.Message, number: int) -> None:
+                    number: int) -> None:
     number -= 1
-    subject.cur_queue[number] = None
-    new_markup = types.InlineKeyboardMarkup(row_width=5)
-    text, buttons = form_buttons_with_queue(my_bot, subject, user)
-    new_markup.add(*buttons)
-    digits = get_digits_of_number(number)
-    if number + 1 == subject.people:
-        text = text[:text.find(f'{number + 1}') + digits]
+    old_msg_ids = subject.msg_ids[:]
+    subject = my_database.get_subject(user.group, subject.name)
+    if subject.cur_queue[number] == user.tg_id:
+        my_database.check_out(user, subject, number)
+
+        subject.cur_queue[number] = None
+        subject.msg_ids[number] = None
+        new_markup = types.InlineKeyboardMarkup(row_width=5)
+        text, buttons = form_buttons_with_queue(my_bot, subject, user)
+        new_markup.add(*buttons)
+        digits = get_digits_of_number(number)
+        if number + 1 == subject.people:
+            text = text[:text.find(f'{number + 1}') + digits]
+        else:
+            text = text[:text.find(f'{number + 1})') + digits] + '\n' + text[text.find(f'{number + 2}'):]
+        await update_msgs(my_bot, user, old_msg_ids, text, new_markup)
     else:
-        text = text[:text.find(f'{number + 1})') + digits] + '\n' + text[text.find(f'{number + 2}'):]
-    await msg.edit_text(text=text, reply_markup=new_markup)
-    my_database.check_out(user, subject, number)
-
-
-def change_for_all_members():
-    pass
+        await my_bot.bot.send_message(chat_id=user.tg_id, text="Вы не можете исключить другого человека из очереди")

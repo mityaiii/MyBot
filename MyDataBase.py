@@ -48,6 +48,7 @@ class MyDataBase:
         subject.name = subject_from_db["_id"]
         subject.people = subject_from_db["people"]
         subject.cur_queue = subject_from_db["cur_queue"]
+        subject.msg_ids = subject_from_db["msg_history"]
         return subject
 
     def get_user(self, tg_id) -> User.User:
@@ -68,8 +69,10 @@ class MyDataBase:
         self.coll = self.db[subject.group]
         if self.is_exist_value("_id", subject.name):
             subject.cur_queue = [None] * subject.people
+            subject.msg_ids = [None] * subject.people
             self.coll.insert_one(
-                {"_id": subject.name, "people": subject.people, "cur_queue": subject.cur_queue})
+                {"_id": subject.name, "people": subject.people, "cur_queue": subject.cur_queue,
+                 "msg_history": subject.msg_ids})
             return True
         return False
 
@@ -95,14 +98,23 @@ class MyDataBase:
     def get_queue(self, user: User.User, subject: Subject.Subject) -> typing.List[int]:
         return self.db[user.group].find_one({"_id": subject.name})["cur_queue"]
 
-    def enroll(self, user: User.User, subject: Subject.Subject, number: int) -> None:
+    def get_msg_history(self, user: User.User, subject: Subject.Subject) -> typing.List[int]:
+        return self.db[user.group].find_one({"_id": subject.name})["msg_history"]
+
+    def enroll(self, user: User.User, subject: Subject.Subject, message_id: int, number: int) -> None:
         cur_queue = self.get_queue(user, subject)
+        msg_history = self.get_msg_history(user, subject)
         if cur_queue[number] is None:
             cur_queue[number] = user.tg_id
+            msg_history[number] = message_id
             self.db[user.group].update_one({"_id": subject.name}, {"$set": {"cur_queue": cur_queue}})
+            self.db[user.group].update_one({"_id": subject.name}, {"$set": {"msg_history": msg_history}})
 
     def check_out(self, user: User.User, subject: Subject.Subject, number: int) -> None:
         cur_queue = self.get_queue(user, subject)
+        msg_history = self.get_msg_history(user, subject)
         if cur_queue[number] is not None:
             cur_queue[number] = None
+            msg_history[number] = None
             self.db[user.group].update_one({"_id": subject.name}, {"$set": {"cur_queue": cur_queue}})
+            self.db[user.group].update_one({"_id": subject.name}, {"$set": {"msg_history": msg_history}})
