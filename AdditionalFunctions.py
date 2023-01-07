@@ -111,7 +111,7 @@ async def check_out(my_bot: MyBot.MyBot, my_database: MyDataBase.MyDataBase, use
     number -= 1
     old_msg_ids = subject.msg_ids[:]
     subject = my_database.get_subject(user.group, subject.name)
-    if subject.cur_queue[number] == user.tg_id:
+    if subject.cur_queue[number] == user.tg_id or user.editor:
         my_database.check_out(user, subject, number)
 
         subject.cur_queue[number] = None

@@ -81,7 +81,23 @@ async def pressed_button(call: types.CallbackQuery, callback_data: dict) -> None
 
 @my_bot.dp.message_handler(Text(equals='Помощь'))
 async def print_help(message: types.Message):
-    pass
+    text = (
+        f"""
+        Привет, {message.from_user.first_name}, это бот, который помогает организовать очередь.
+        Мой исходный код вы можете найти по ссылке https://github.com/mityaiii/QueuePythonBot.git. Если есть желания помочь или доработать бота, то просьба добавлять все в ведку develop и делать pull request в main.
+        Если вам понравилось приложение, нажмите кнопку stars
+    Что я умею:
+        1. Добавлять/Удалять группу (add_group/del_group).
+        2. Добавлять/Удалять предмет (add_subject/del_subject).
+        3. Исключать человека из очереди (del_person).
+        4. Поддерживать очередь на предмет.
+    Для того, чтобы записаться необходимо:
+        1. Нажать на кнопку <Выбрать предмет>.
+        2. Выбрать предмет из выпавшего списка.
+        3. Нажать на кнопку с номером, которым вы хотите стать в очереди
+        4. Если очередь занята, то кнопка будет иметь следующий вид: ❌, если запись доступна, то ✅ 
+        """)
+    await my_bot.bot.send_message(chat_id=message.from_user.id, text=text)
 
 
 @my_bot.dp.message_handler(Text(equals='Выбрать предмет'))
@@ -156,18 +172,20 @@ async def process_name(message: types.Message, state: FSMContext):
 
 @my_bot.dp.message_handler(commands=['add_group'])
 async def add_group_with_command(message: types.Message) -> None:
-    await FormForGroup.name_of_group.set()
-    await my_bot.bot.send_message(chat_id=message.from_user.id,
-                                  text='Напишите название группы или /cancel, чтобы отменить операцию')
+    if not my_database.is_root_id(message.from_user.id):
+        await FormForGroup.name_of_group.set()
+        await my_bot.bot.send_message(chat_id=message.from_user.id,
+                                      text='Напишите название группы или /cancel, чтобы отменить операцию')
 
 
 @my_bot.dp.message_handler(commands=['del_group'])
 async def del_group_with_command(message: types.Message) -> None:
-    buttons = AdditionalFunctions.form_buttons_with_groups(my_bot, my_database, 'del')
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    markup.add(*buttons)
-    await my_bot.bot.send_message(chat_id=message.from_user.id, text='Выберите группу, которую вы хотите удалить',
-                                  reply_markup=markup)
+    if not my_database.is_root_id(message.from_user.id):
+        buttons = AdditionalFunctions.form_buttons_with_groups(my_bot, my_database, 'del')
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(*buttons)
+        await my_bot.bot.send_message(chat_id=message.from_user.id, text='Выберите группу, которую вы хотите удалить',
+                                      reply_markup=markup)
 
 
 @my_bot.dp.message_handler(state=FormForAddSubject.name_of_subject)
@@ -190,27 +208,32 @@ async def process_name(message: types.Message, state: FSMContext):
 
 @my_bot.dp.message_handler(commands=['add_subject'])
 async def add_subject_with_command(message: types.Message, state: FSMContext) -> None:
-    EnvironmentVariables.subject.group = my_database.find_group(message.from_user.id)
-    await my_bot.bot.send_message(chat_id=message.from_user.id,
-                                  text="Укажите название предмета, который вы хотите добавить")
-    await state.set_data({"comm": "add"})
-    await FormForAddSubject.name_of_subject.set()
+    if not my_database.is_root_id(message.from_user.id):
+        EnvironmentVariables.subject.group = my_database.find_group(message.from_user.id)
+        await my_bot.bot.send_message(chat_id=message.from_user.id,
+                                      text="Укажите название предмета, который вы хотите добавить")
+        await state.set_data({"comm": "add"})
+        await FormForAddSubject.name_of_subject.set()
 
 
 @my_bot.dp.message_handler(commands=['del_subject'])
 async def del_subject_with_command(message: types.Message) -> None:
-    buttons = AdditionalFunctions.form_buttons_with_subjects(my_bot, my_database, my_database.get_user_group(
-        message.from_user.id), "del")
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    markup.add(*buttons)
-    await my_bot.bot.send_message(chat_id=message.from_user.id,
-                                  text="Укажите название предмета, который вы хотите удалить", reply_markup=markup)
+    if not my_database.is_root_id(message.from_user.id):
+        buttons = AdditionalFunctions.form_buttons_with_subjects(my_bot, my_database, my_database.get_user_group(
+            message.from_user.id), "del")
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(*buttons)
+        await my_bot.bot.send_message(chat_id=message.from_user.id,
+                                      text="Укажите название предмета, который вы хотите удалить", reply_markup=markup)
 
 
 @my_bot.dp.message_handler(commands=['del_person'])
 async def del_person_with_command(message: types.Message) -> None:
-    await my_bot.bot.send_message(chat_id=message.from_user.id,
-                                  text="Вы можете отписать одного человека, нажав ❌ в том, где он записан")
+    if not my_database.is_root_id(message.from_user.id):
+        await my_bot.bot.send_message(chat_id=message.from_user.id,
+                                      text="Вы можете отписать одного человека, нажав ❌ в том, где он записан")
+        EnvironmentVariables.user = my_database.get_user(message.from_user.id)
+        my_database.swap_editor_status(EnvironmentVariables.user)
 
 
 async def set_commands_in_menu(my_commands) -> None:

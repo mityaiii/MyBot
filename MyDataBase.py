@@ -54,14 +54,19 @@ class MyDataBase:
     def get_user(self, tg_id) -> User.User:
         user_from_db = self.db.users.find_one({"_id": tg_id})
         user = User.User(user_from_db["_id"], user_from_db["name"], user_from_db["group"])
+        user.root = user_from_db["root"]
+        user.editor = user_from_db["editor"]
         return user
+
+    def swap_editor_status(self, user: User.User) -> None:
+        self.db[user.group].update_one({"_id": user.tg_id}, {"$set": {"msg_history": not user.editor}})
 
     def add_user(self, user: User.User) -> bool:
         self.coll = self.db.users
         if self.is_exist_value("_id", user.tg_id):
             if self.db.groups.find_one({"_id": user.group})["root_id"] == user.tg_id:
                 user.root = True
-            self.coll.insert_one({"_id": user.tg_id, "name": user.name, "group": user.group, "root": user.root})
+            self.coll.insert_one({"_id": user.tg_id, "name": user.name, "group": user.group, "root": user.root, "editor": user.editor})
             return True
         return False
 
@@ -92,8 +97,11 @@ class MyDataBase:
     def del_subject(self, group: str, subject: Subject.Subject) -> None:
         self.db[group].delete_one({"_id": subject.name})
 
-    def find_group(self, root_id) -> str:
+    def find_group(self, root_id: int) -> int:
         return self.db.groups.find_one({"root_id": root_id})["_id"]
+
+    def is_root_id(self, tg_id: int) -> bool:
+        return self.db.users.find_one({"root_id": tg_id}) is None
 
     def get_queue(self, user: User.User, subject: Subject.Subject) -> typing.List[int]:
         return self.db[user.group].find_one({"_id": subject.name})["cur_queue"]
