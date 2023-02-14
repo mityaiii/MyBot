@@ -37,7 +37,7 @@ class MyDataBase:
         groups = [group["name"] for group in self.db.list_collections()]
         if "users" in groups:
             groups.remove("users")
-        if "groups":
+        if "groups" in groups:
             groups.remove("groups")
         return groups
 
