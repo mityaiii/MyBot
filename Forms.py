@@ -18,3 +18,4 @@ class FormForAddSubject(StatesGroup):
 
 class FormForDelSubject(StatesGroup):
     name_of_subject = State()
+

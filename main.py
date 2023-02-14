@@ -4,8 +4,7 @@ import Subject
 import User
 import MyDataBase
 import AdditionalFunctions
-
-import typing
+import ChatGPT
 
 from Config import Config
 
@@ -33,50 +32,6 @@ async def cancel_handler(message: types.Message, state: FSMContext):
 
     await state.finish()
     await message.reply('Cancelled.')
-
-
-@my_bot.dp.callback_query_handler(my_bot.cb.filter())
-async def pressed_button(call: types.CallbackQuery, callback_data: dict) -> None:
-    action, name_of_subject, msg = callback_data["msg_text"].split("|")
-    info = call.from_user
-    if msg in my_database.get_list_of_groups():
-        if action == "choose":
-            await my_bot.bot.send_message(chat_id=info.id, text='Введите пароль группы')
-            await LoginGroup.password.set()
-            EnvironmentVariables.user = User.User(tg_id=info.id, name=info.first_name, group=msg)
-        elif action == "del":
-            my_database.del_group(msg)
-            await my_bot.bot.send_message(chat_id=info.id, text=f'Вы удалили группу {msg}')
-    elif msg in my_database.get_list_of_subjects(my_database.get_user_group(info.id)):
-        name_of_group = my_database.get_user_group(info.id)
-        EnvironmentVariables.subject = my_database.get_subject(name_of_group, msg)
-        EnvironmentVariables.user = my_database.get_user(info.id)
-        if action == "choose":
-            text, buttons = AdditionalFunctions.form_buttons_with_queue(my_bot, EnvironmentVariables.subject,
-                                                                        EnvironmentVariables.user)
-            markup = types.InlineKeyboardMarkup(row_width=5)
-            markup.add(*buttons)
-            await my_bot.bot.send_message(chat_id=info.id, text=text, reply_markup=markup)
-        elif action == "del":
-            my_database.del_subject(name_of_group, EnvironmentVariables.subject)
-            await my_bot.bot.send_message(chat_id=info.id, text=f'Вы удалили предмет {msg}')
-        elif action == "del_person":
-            text, buttons = AdditionalFunctions.form_buttons_with_queue(my_bot, EnvironmentVariables.subject,
-                                                                        EnvironmentVariables.user)
-            markup = types.InlineKeyboardMarkup(row_width=5)
-            markup.add(*buttons)
-            await my_bot.bot.send_message(chat_id=info.id, text=text, reply_markup=markup)
-    elif msg.isdigit():
-        name_of_group = my_database.get_user_group(info.id)
-        EnvironmentVariables.subject = my_database.get_subject(name_of_group, name_of_subject)
-        EnvironmentVariables.user = my_database.get_user(info.id)
-        if action == "enroll":
-            await AdditionalFunctions.enroll(my_bot, my_database, EnvironmentVariables.user,
-                                             EnvironmentVariables.subject, call.message, int(msg))
-        elif action == "check_out":
-            await AdditionalFunctions.check_out(my_bot, my_database, EnvironmentVariables.user,
-                                                EnvironmentVariables.subject, int(msg))
-    await my_bot.bot.answer_callback_query(call.id)
 
 
 @my_bot.dp.message_handler(Text(equals='Помощь'))
@@ -111,6 +66,65 @@ async def choose_subject(message: types.Message):
                                   reply_markup=markup)
 
 
+@my_bot.dp.callback_query_handler(my_bot.cb.filter())
+async def pressed_button(call: types.CallbackQuery, callback_data: dict) -> None:
+    action, name_of_subject, msg = callback_data["msg_text"].split("|")
+    info = call.from_user
+    if msg in my_database.get_list_of_groups():
+        if action == "choose":
+            await my_bot.bot.send_message(chat_id=info.id, text='Введите пароль группы')
+            await LoginGroup.password.set()
+            EnvironmentVariables.user = User.User(tg_id=info.id, name=info.first_name, group=msg)
+        elif action == "del":
+            my_database.del_group(msg)
+            await my_bot.bot.send_message(chat_id=info.id, text=f'Вы удалили группу {msg}')
+    elif msg in my_database.get_list_of_subjects(my_database.get_user_group(info.id)):
+        name_of_group = my_database.get_user_group(info.id)
+        EnvironmentVariables.subject = my_database.get_subject(name_of_group, msg)
+        EnvironmentVariables.user = my_database.get_user(info.id)
+        if action == "choose":
+            text, buttons = AdditionalFunctions.form_buttons_with_queue(my_bot, my_database,
+                                                                        EnvironmentVariables.subject)
+
+            markup = types.InlineKeyboardMarkup(row_width=5)
+            markup.add(*buttons)
+            _ = await my_bot.bot.send_message(chat_id=info.id, text=text, reply_markup=markup)
+
+            number_of_old_msg = my_database.find_user_number(EnvironmentVariables.user,
+                                                             EnvironmentVariables.subject)
+
+            if number_of_old_msg is not None and \
+                    EnvironmentVariables.subject.msg_ids[number_of_old_msg] is not None:
+                id_of_new_msg = _["message_id"]
+
+                # await my_bot.bot.delete_message(info.id,
+                #                                 EnvironmentVariables.subject.msg_ids[number_of_old_msg])
+                my_database.update_history_of_msg(EnvironmentVariables.user, EnvironmentVariables.subject,
+                                                  id_of_new_msg, number_of_old_msg)
+
+        elif action == "del":
+            my_database.del_subject(name_of_group, EnvironmentVariables.subject)
+            await my_bot.bot.send_message(chat_id=info.id, text=f'Вы удалили предмет {msg}')
+        elif action == "del_person":
+            text, buttons = AdditionalFunctions.form_buttons_with_queue(my_bot, my_database,
+                                                                        EnvironmentVariables.subject)
+            markup = types.InlineKeyboardMarkup(row_width=5)
+            markup.add(*buttons)
+            await my_bot.bot.send_message(chat_id=info.id, text=text, reply_markup=markup)
+    elif msg.isdigit():
+        name_of_group = my_database.get_user_group(info.id)
+        EnvironmentVariables.subject = my_database.get_subject(name_of_group, name_of_subject)
+        EnvironmentVariables.user = my_database.get_user(info.id)
+
+        if action == "enroll":
+            await AdditionalFunctions.enroll(my_bot, my_database, EnvironmentVariables.user,
+                                             EnvironmentVariables.subject, call.message, int(msg))
+        elif action == "check_out":
+            await AdditionalFunctions.check_out(my_bot, my_database, EnvironmentVariables.user,
+                                                EnvironmentVariables.subject, int(msg))
+    await my_bot.bot.answer_callback_query(call.id)
+
+
 @my_bot.dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message) -> None:
     text = f'Привет, {message.from_user.first_name}, выбери свою группу'
@@ -125,11 +139,12 @@ async def process_name(message: types.Message, state: FSMContext):
     password = my_database.db.groups.find_one({"_id": EnvironmentVariables.user.group})["password"]
     if message.text == password:
         my_database.add_user(EnvironmentVariables.user)
-        button_subject = types.KeyboardButton(text='Выбрать предмет')
         button_help = types.KeyboardButton(text='Помощь')
-        markup = types.ReplyKeyboardMarkup()
-        markup.add(button_help, button_subject)
+        button_subject = types.KeyboardButton(text='Выбрать предмет')
+        markup = types.ReplyKeyboardMarkup(row_width=1)
+        markup.add(button_subject, button_help)
         await message.reply(text="Поздравляю! Вы ввели правильный пароль", reply_markup=markup)
+
         if message.from_user.id == my_id:
             await set_commands_in_menu(AdditionalFunctions.set_main_commands())
         elif message.from_user.id == my_database.db.groups.find_one({"root_id": EnvironmentVariables.user.group}):
@@ -172,20 +187,25 @@ async def process_name(message: types.Message, state: FSMContext):
 
 @my_bot.dp.message_handler(commands=['add_group'])
 async def add_group_with_command(message: types.Message) -> None:
-    if not my_database.is_root_id(message.from_user.id):
+    if message.from_user.id == Config.config['ID']['my_id']:
         await FormForGroup.name_of_group.set()
         await my_bot.bot.send_message(chat_id=message.from_user.id,
                                       text='Напишите название группы или /cancel, чтобы отменить операцию')
+    else:
+        await my_bot.bot.send_message(message.from_user.id,
+                                      text='Only one person can do it...')
 
 
 @my_bot.dp.message_handler(commands=['del_group'])
 async def del_group_with_command(message: types.Message) -> None:
-    if not my_database.is_root_id(message.from_user.id):
+    if my_database.is_root_id(message.from_user.id):
         buttons = AdditionalFunctions.form_buttons_with_groups(my_bot, my_database, 'del')
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(*buttons)
         await my_bot.bot.send_message(chat_id=message.from_user.id, text='Выберите группу, которую вы хотите удалить',
                                       reply_markup=markup)
+    else:
+        await AdditionalFunctions.say_no(my_bot, message)
 
 
 @my_bot.dp.message_handler(state=FormForAddSubject.name_of_subject)
@@ -208,32 +228,42 @@ async def process_name(message: types.Message, state: FSMContext):
 
 @my_bot.dp.message_handler(commands=['add_subject'])
 async def add_subject_with_command(message: types.Message, state: FSMContext) -> None:
-    if not my_database.is_root_id(message.from_user.id):
-        EnvironmentVariables.subject.group = my_database.find_group(message.from_user.id)
-        await my_bot.bot.send_message(chat_id=message.from_user.id,
-                                      text="Укажите название предмета, который вы хотите добавить")
-        await state.set_data({"comm": "add"})
-        await FormForAddSubject.name_of_subject.set()
+    EnvironmentVariables.subject.group = my_database.find_group(message.from_user.id)
+    _ = await my_bot.bot.send_message(chat_id=message.from_user.id,
+                                  text="Укажите название предмета, который вы хотите добавить")
+    await state.set_data({"comm": "add"})
+    await FormForAddSubject.name_of_subject.set()
 
 
 @my_bot.dp.message_handler(commands=['del_subject'])
 async def del_subject_with_command(message: types.Message) -> None:
-    if not my_database.is_root_id(message.from_user.id):
+    if my_database.is_root_id(message.from_user.id):
         buttons = AdditionalFunctions.form_buttons_with_subjects(my_bot, my_database, my_database.get_user_group(
             message.from_user.id), "del")
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(*buttons)
         await my_bot.bot.send_message(chat_id=message.from_user.id,
                                       text="Укажите название предмета, который вы хотите удалить", reply_markup=markup)
+    else:
+        await AdditionalFunctions.say_no(my_bot, message)
 
 
 @my_bot.dp.message_handler(commands=['del_person'])
 async def del_person_with_command(message: types.Message) -> None:
-    if not my_database.is_root_id(message.from_user.id):
+    if my_database.is_root_id(message.from_user.id):
         await my_bot.bot.send_message(chat_id=message.from_user.id,
                                       text="Вы можете отписать одного человека, нажав ❌ в том, где он записан")
         EnvironmentVariables.user = my_database.get_user(message.from_user.id)
         my_database.swap_editor_status(EnvironmentVariables.user)
+    else:
+        await AdditionalFunctions.say_no(my_bot, message)
+
+
+@my_bot.dp.message_handler(content_types="text")
+async def answer_chatgpt(message: types.Message):
+    if not (message.text in ChatGPT.ChatGPT.phrases_for_ignore):
+        answer = ChatGPT.ChatGPT.get_answer(message.text)
+        await my_bot.bot.send_message(chat_id=message.from_user.id, text=answer)
 
 
 async def set_commands_in_menu(my_commands) -> None:

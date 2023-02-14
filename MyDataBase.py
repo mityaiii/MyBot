@@ -35,8 +35,10 @@ class MyDataBase:
 
     def get_list_of_groups(self) -> typing.List[str]:
         groups = [group["name"] for group in self.db.list_collections()]
-        groups.remove("users")
-        groups.remove("groups")
+        if "users" in groups:
+            groups.remove("users")
+        if "groups":
+            groups.remove("groups")
         return groups
 
     def get_user_group(self, tg_id: int) -> str:
@@ -66,7 +68,8 @@ class MyDataBase:
         if self.is_exist_value("_id", user.tg_id):
             if self.db.groups.find_one({"_id": user.group})["root_id"] == user.tg_id:
                 user.root = True
-            self.coll.insert_one({"_id": user.tg_id, "name": user.name, "group": user.group, "root": user.root, "editor": user.editor})
+            self.coll.insert_one(
+                {"_id": user.tg_id, "name": user.name, "group": user.group, "root": user.root, "editor": user.editor})
             return True
         return False
 
@@ -109,6 +112,15 @@ class MyDataBase:
     def get_msg_history(self, user: User.User, subject: Subject.Subject) -> typing.List[int]:
         return self.db[user.group].find_one({"_id": subject.name})["msg_history"]
 
+    def find_user_number(self, user: User.User, subject: Subject.Subject):
+        queue = self.get_queue(user, subject)
+        if queue is None:
+            return None
+        else:
+            for i in range(len(queue)):
+                if user.tg_id == queue[i]:
+                    return i
+
     def enroll(self, user: User.User, subject: Subject.Subject, message_id: int, number: int) -> None:
         cur_queue = self.get_queue(user, subject)
         msg_history = self.get_msg_history(user, subject)
@@ -124,5 +136,16 @@ class MyDataBase:
         if cur_queue[number] is not None:
             cur_queue[number] = None
             msg_history[number] = None
+            prev_person_id: int = None
+            prev_msg_id: int = None
+            for i in range(subject.people - 1, number - 1, - 1):
+                cur_queue[i], prev_person_id = prev_person_id, cur_queue[i]
+                msg_history[i], prev_msg_id = prev_msg_id, msg_history[i]
+
+            print(cur_queue)
             self.db[user.group].update_one({"_id": subject.name}, {"$set": {"cur_queue": cur_queue}})
             self.db[user.group].update_one({"_id": subject.name}, {"$set": {"msg_history": msg_history}})
+
+    def update_history_of_msg(self, user: User.User, subject: Subject.Subject, msg_id: int, number: int) -> None:
+        subject.msg_ids[number] = msg_id
+        self.db[user.group].update_one({"_id": subject.name}, {"$set": {"msg_history": subject.msg_ids}})
